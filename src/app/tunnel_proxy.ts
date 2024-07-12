@@ -45,9 +45,13 @@ export default class TunnelProxy {
 
     }
 
-    private CreateRequestHTTP(id_request: number, request: IRequest): IRequestHTTP {
+    public CreateRequestHTTP(id_request: number, request: IRequest): IRequestHTTP {
         // request url
         const url = new URL(request.path, this.hostproxy_url);
+        const listenner: {
+            eventType: string,
+            callback: (...args: any[]) => void
+        }[] = [];
 
         const requestHTTP: IRequestHTTP = {
 
@@ -56,17 +60,21 @@ export default class TunnelProxy {
 
             // Add listen
             on(eventType: string, callback: (...args: any[]) => void): void {
-                
+                // add listenner
+                listenner.push({ eventType, callback })
             },
 
+            // write body
             write(chunk): void {
-                
+                fetching.write(chunk);
             },
 
+            // end and emit request
             end(): void {
-                
+                fetching.end();
             },
 
+            // abort request
             abort(err?: Error): void {
 
             }
@@ -94,60 +102,86 @@ export default class TunnelProxy {
             method: request.method.toUpperCase(),
             headers: headersRequest,
             signal: controller.signal
-        }, (incomming) => {
-
         });
 
         fetching.on("connect", (incomming, socket, head) => {
-
+            console.log("Event emmited:", "connect");
         });
 
         fetching.on("close", () => {
-
+            console.log("Event emmited:", "close");
         });
 
         fetching.on("continue", () => {
-
+            console.log("Event emmited:", "continue");
         });
 
         fetching.on("drain", () => {
-
+            console.log("Event emmited:", "drain");
         });
 
         fetching.on("error", (err) => {
-
+            console.log("Event emmited:", "error");
         });
 
         fetching.on("finish", () => {
-
+            console.log("Event emmited:", "finish");
         });
 
         fetching.on("information", (info) => {
-
+            console.log("Event emmited:", "information");
         });
     
         fetching.on("pipe", (src) => {
-
+            console.log("Event emmited:", "pipe");
         });
 
         fetching.on("response", (response) => {
+            console.log("Event emmited:", "response");
 
+            response.on("resume", () => {
+                console.log("response event: resume")
+            });
+
+            // response.on("readable", () => {
+            //     console.log("response event: readable")
+            // });
+
+            response.on("pause", () => {
+                console.log("response event: pause")
+            });
+
+            response.on("error", (err) => {
+                console.log("response event: error")
+            });
+
+            response.on("end", () => {
+                    console.log("response event: end")
+            });
+
+            response.on("data", (chunk) => {
+                console.log("response event: data")
+            });
+
+            response.on("close", () => {
+                console.log("response event: close")
+            });
         });
 
         fetching.on("socket", (socket) => {
-
+            console.log("Event emmited:", "socket");
         });
 
         fetching.on("timeout", () => {
-
+            console.log("Event emmited:", "timeout");
         });
 
         fetching.on("unpipe", (src) => {
-
+            console.log("Event emmited:", "unpipe");
         });
 
         fetching.on("upgrade", (response, socket, head) => {
-
+            console.log("Event emmited:", "upgrade");
         });
 
         return requestHTTP;

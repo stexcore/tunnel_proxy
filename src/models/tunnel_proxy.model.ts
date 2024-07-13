@@ -8,6 +8,11 @@ export interface IConfigTunnelProxy {
      * Url base similar of "http://localhost:9000" or "https://www.google.com"
      */
     hostproxy_url: string
+
+    /**
+     * Flag to show console logs
+     */
+    show_logs?: boolean
 }
 
 export interface IRequestHTTP {

@@ -81,8 +81,15 @@ export default class TunnelProxy {
 
                 // Disconnect connection Event 
                 this.socket.on("disconnect", (reason) => {
-                    this.log("Disconnect".red, reason);
-                    this.socket = null;
+                    if(this.socket) {
+                        this.log("Disconnect".red, reason);
+
+                        const request = [...this.requests];
+
+                        request.forEach((requestItem) => {
+                            requestItem.abort(new Error("Lost connection tunnel"));
+                        });
+                    }
                 });
 
                 // Error to connect Event
@@ -134,8 +141,16 @@ export default class TunnelProxy {
                     this.log("Connect");
                 });
 
+                const abortRequest = (id_request: number) => {
+                    if(this.socket) {
+                        this.socket.emit("http_abort", id_request, "Does not exist the request '" + id_request + "'");
+                    }
+                }
+
                 // request HTTP
                 this.socket.on("http_request", (id_request: number, request: IRequest) => {
+
+                    let statusCodeRequest: number | undefined;
 
                     // check if error of server
                     if(this.requests.some(requestHTTPItem => requestHTTPItem.id_request === id_request)) {
@@ -169,6 +184,7 @@ export default class TunnelProxy {
                         headers.forEach((value, keyname) => {
                             headersData[keyname] = value;
                         });
+                        statusCodeRequest = statusCode;
                         
                         this.emitEvent("http_response", id_request, headersData, statusCode);
                     });
@@ -183,26 +199,90 @@ export default class TunnelProxy {
 
                     requestHTTP.on("http_close", () => {
                         this.emitEvent("http_close", id_request);
+
+                        const dateTime = new Date();
+                        let colorStatus: "cyan" | "green" | "yellow" | "red" | "gray" | "blue" | "magenta";
+                        let colorMethod: typeof colorStatus;
+
+                        const colorsMethod: {[key: string]: typeof colorStatus} = {
+                            GET: "green",
+                            POST: "yellow",
+                            PUT: "blue",
+                            PATCH: "magenta",
+                            DELETE: "red",
+                            HEAD: "green",
+                            OPTIONS: "magenta",
+                        } as const
+
+                        colorStatus = "gray";
+                        if(statusCodeRequest) {
+                            if(statusCodeRequest >= 100 && statusCodeRequest < 200)
+                                colorStatus = "cyan";
+                            if(statusCodeRequest >= 200 && statusCodeRequest < 300)
+                                colorStatus = "green";
+                            if(statusCodeRequest >= 300 && statusCodeRequest < 400)
+                                colorStatus = "yellow";
+                            if(statusCodeRequest >= 400 && statusCodeRequest < 600)
+                                colorStatus = "red";
+                        }
+
+                        colorMethod = colorsMethod[request.method.toUpperCase()] || "gray" as const
+                        
+                        this.log(
+                            // time request
+                            (
+                                (dateTime.getHours()+1).toString().padStart(2, "0") + ":" +
+                                (dateTime.getMinutes()).toString().padStart(2, "0") + ":" +
+                                (dateTime.getSeconds()).toString().padStart(2, "0")
+                            ).gray,
+                            // method request
+                            (
+                                "[" + request.method.toUpperCase().trim() + "]"
+                            )[colorMethod],
+                            // status code
+                            (
+                                statusCodeRequest?.toString() || "---"
+                            ).padStart(3, " ")[colorStatus],
+                            // path request
+                            (
+                                request.path.cyan
+                            )
+                        )
                     });
 
                     requestHTTP.on("http_error", (err) => {
-                        this.emitEvent("http_error", id_request, err);
+                        this.emitEvent("http_error", id_request, err?.message || "Unknow Error");
                     });
                 });
 
                 // data of request HTTP
                 this.socket.on("http_data", (id_request: number, chunk: Uint8Array) => {
+                    const request = this.GetRequestHTTP(id_request);
 
+                    if(request) {
+                        request.write(chunk);
+                    }
+                    else abortRequest(id_request);
                 });
 
                 // end write data of request HTTP
                 this.socket.on("http_end", (id_request: number) => {
+                    const request = this.GetRequestHTTP(id_request);
 
+                    if(request) {
+                        request.end();
+                    }
+                    else abortRequest(id_request);
                 });
 
                 // abort request HTTP
-                this.socket.on("http_abort", (id_request: number) => {
+                this.socket.on("http_abort", (id_request: number, errorMsg: string) => {
+                    const request = this.GetRequestHTTP(id_request);
 
+                    if(request) {
+                        request.abort(new Error(errorMsg));
+                    }
+                    else abortRequest(id_request);
                 });
             }
             catch(err) {
@@ -218,7 +298,9 @@ export default class TunnelProxy {
     public async destroy(): Promise<void> {
         if(this.socket) {
             try {
-                this.socket.disconnect();
+                const socket = this.socket;
+                this.socket = null;
+                socket.disconnect();
             }
             catch(err) {
                 console.error(err);
@@ -382,6 +464,11 @@ export default class TunnelProxy {
         });
 
         return requestHTTP;
+    }
+
+    public GetRequestHTTP(id_request: number): IRequestHTTP | null {
+        const request = this.requests.find(requestItem => requestItem.id_request === id_request);
+        return request ?? null;
     }
 
     /**

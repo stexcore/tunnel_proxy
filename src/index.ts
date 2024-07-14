@@ -5,16 +5,16 @@ import dotenv from "dotenv";
  * Settings initial
  ***************************************/
 
-// config environments
-const configOutput = dotenv.config();
-
-// check error
-if(configOutput.error) {
-    throw configOutput.error;
-}
-
 // check environment
 if(!process.env.BACKEND_URL) {
+    // config environments
+    const configOutput = dotenv.config();
+
+    // check error
+    if(configOutput.error) {
+        throw configOutput.error;
+    }
+    
     console.log("'BACKEND_URL' environment is'nt defined".red);
     process.exit(-1);
 }

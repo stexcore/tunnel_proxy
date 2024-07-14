@@ -2,10 +2,12 @@
   "name": "tunnel_proxy",
   "version": "1.0.0",
   "description": "Proxy service that allows establishing a connection to a server, to create a reverse proxy that allows creating a solution to establish hidden or private http connections on the public network.",
-  "main": "index.js",
+  "bin": "./dist/entry.js",
+  "main": "./dist/index.js",
   "scripts": {
     "dev": "nodemon ./src/index.ts",
-    "test": "ts-node ./src/tests/index.ts"
+    "test": "ts-node ./src/tests/index.ts",
+    "build": "tsc && node ./dist/builder/builder.js && pkg . && rm dist/entry.js"
   },
   "keywords": [],
   "author": "",
@@ -13,6 +15,7 @@
   "devDependencies": {
     "dotenv": "^16.4.5",
     "nodemon": "^3.1.4",
+    "pkg": "^5.8.1",  
     "ts-node": "^10.9.2",
     "typescript": "^5.5.3"
   },
@@ -20,5 +23,14 @@
     "@types/node": "^20.14.10",
     "colors": "^1.4.0",
     "socket.io-client": "^4.7.5"
+  },
+  "pkg": {
+    "outputPath": "./exec",
+    "scripts": [
+      "./example.js"
+    ],
+    "targets": [
+      "node14-linux"
+    ]
   }
 }

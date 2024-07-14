@@ -1,7 +1,9 @@
-import { IRequest } from "../models/requests.model";
+import { ErrorNotAvariableProxyName, ErrorUnknow } from "../classes/errors.class";
 import { IConfigTunnelProxy, IRequestHTTP } from "../models/tunnel_proxy.model";
 import { io, Socket } from "socket.io-client";
-import http from "http";
+import { IRequest } from "../models/requests.model";
+import errorsContants from "../constants/errors.contants";
+import http, { IncomingMessage } from "http";
 import https from "https";
 import "colors";
 
@@ -13,17 +15,22 @@ export default class TunnelProxy {
     /**
      * Url ApiServer **api_reverse_proxy**
      */
-    private backend_url: string;
+    private readonly backend_url: string;
 
     /**
      * Url host proxy
      */
-    private hostproxy_url: string;
+    private readonly hostproxy_url: string;
+
+    /**
+     * Proxy name
+     */
+    private readonly proxy_name: string;
 
     /**
      * Show logs
      */
-    private show_logs: boolean;
+    private readonly show_logs: boolean;
 
     /**
      * Array of requests
@@ -41,6 +48,7 @@ export default class TunnelProxy {
     constructor(config: IConfigTunnelProxy) {
         this.backend_url = config.backend_url;
         this.hostproxy_url = config.hostproxy_url;
+        this.proxy_name = config.proxy_name;
         this.show_logs = config.show_logs ?? true;
         this.socket = null;
     }
@@ -48,7 +56,7 @@ export default class TunnelProxy {
     /**
      * Start device
      */
-    public inicialize(): Promise<void> {
+    public inicialize(): Promise<{ origin: string, destination: string }> {
         return new Promise((resolve, reject) => {
             try {
                 // check other process
@@ -65,7 +73,10 @@ export default class TunnelProxy {
                 
                 // create socket connection
                 this.socket = io(this.backend_url, {
-                    reconnection: true
+                    reconnection: true,
+                    query: {
+                        proxyName: this.proxy_name
+                    }
                 });
 
                 // Disconnect connection Event 
@@ -75,11 +86,28 @@ export default class TunnelProxy {
                 });
 
                 // Error to connect Event
-                this.socket.on("connect_error", (err) => {
+                this.socket.on("connect_error", (err: Error & { data?: any }) => {
+
                     if(!connectedSomeTime) {
                         // close to prevent attemps to reconnect
                         this.socket?.disconnect();
-                        // reject promise and exit 
+
+                        // check the type of error ad generate class error element
+                        switch(err.data) {
+
+                            case errorsContants.NO_AVARIABLE_PROXYNAME:
+                                err = new ErrorNotAvariableProxyName(err.message);
+                                break;
+
+                            case errorsContants.UNKNOWN_ERROR:
+                                err = new ErrorUnknow(err.message);
+                                break;
+
+                            default:
+                                // none actions
+                        } 
+
+                        // reject promise and exit
                         return reject(err);
                     }
 
@@ -88,7 +116,93 @@ export default class TunnelProxy {
 
                 // Connect Event
                 this.socket.on("connect", () => {
+                    if(!connectedSomeTime) {
+                        const origin = new URL(this.hostproxy_url);
+                        const destination = new URL(
+                            "/proxy/" + encodeURIComponent(this.proxy_name),
+                            this.backend_url
+                        );
+
+                        connectedSomeTime = true;
+
+                        return resolve({
+                            origin: origin.href,
+                            destination: destination.href
+                        });
+                    }
+
                     this.log("Connect");
+                });
+
+                // request HTTP
+                this.socket.on("http_request", (id_request: number, request: IRequest) => {
+
+                    // check if error of server
+                    if(this.requests.some(requestHTTPItem => requestHTTPItem.id_request === id_request)) {
+                        return console.warn(
+                            "WARNING: The server issued an HTTP request with an identifier similar".yellow,
+                            "to another HTTP request in progress".yellow
+                        );
+                    }
+
+                    // create request HTTP
+                    const requestHTTP = this.CreateRequestHTTP(id_request, {
+                        ...request,
+                        headers: new Headers(request.headers)
+                    });
+
+                    requestHTTP.on("http_init", () => {
+                        this.emitEvent("http_init", id_request);
+                    });
+
+                    requestHTTP.on("http_finish", () => {
+                        this.emitEvent("http_finish", id_request);
+                    });
+
+                    requestHTTP.on("http_upgrade", () => {
+                        this.emitEvent("http_upgrade", id_request);
+                    });
+
+                    requestHTTP.on("http_response", (headers: Headers, statusCode: number) => {
+                        const headersData: {[key: string]: string} = {};
+
+                        headers.forEach((value, keyname) => {
+                            headersData[keyname] = value;
+                        });
+                        
+                        this.emitEvent("http_response", id_request, headersData, statusCode);
+                    });
+
+                    requestHTTP.on("http_data", (chunk) => {
+                        this.emitEvent("http_data", id_request, chunk);
+                    });
+
+                    requestHTTP.on("http_end", () => {
+                        this.emitEvent("http_end", id_request);
+                    });
+
+                    requestHTTP.on("http_close", () => {
+                        this.emitEvent("http_close", id_request);
+                    });
+
+                    requestHTTP.on("http_error", (err) => {
+                        this.emitEvent("http_error", id_request, err);
+                    });
+                });
+
+                // data of request HTTP
+                this.socket.on("http_data", (id_request: number, chunk: Uint8Array) => {
+
+                });
+
+                // end write data of request HTTP
+                this.socket.on("http_end", (id_request: number) => {
+
+                });
+
+                // abort request HTTP
+                this.socket.on("http_abort", (id_request: number) => {
+
                 });
             }
             catch(err) {
@@ -102,7 +216,14 @@ export default class TunnelProxy {
      * Stop the device
      */
     public async destroy(): Promise<void> {
-
+        if(this.socket) {
+            try {
+                this.socket.disconnect();
+            }
+            catch(err) {
+                console.error(err);
+            }
+        }
     }
 
     public CreateRequestHTTP(id_request: number, request: IRequest): IRequestHTTP {
@@ -129,6 +250,19 @@ export default class TunnelProxy {
                 fetching.write(chunk);
             },
 
+            emit(eventType: string, ...args: any[]): void {
+                listenner.forEach(listennerItem => {
+                    try {
+                        if(listennerItem.eventType === eventType) {
+                            listennerItem.callback(...args);
+                        }
+                    }
+                    catch(err) {
+                        console.error(err);
+                    }
+                });
+            },
+
             // end and emit request
             end(): void {
                 fetching.end();
@@ -136,9 +270,15 @@ export default class TunnelProxy {
 
             // abort request
             abort(err?: Error): void {
-
+                controller.abort(err);
             }
         };
+
+        // Append listen to close socket tcp
+        requestHTTP.on("http_close", () => {
+            // remove of memory
+            this.requests = this.requests.filter(requestItem => requestItem.id_request !== id_request);
+        });
 
         // Add request of array
         this.requests.push(requestHTTP);
@@ -164,10 +304,12 @@ export default class TunnelProxy {
             signal: controller.signal,
             timeout: 0
         });
+        let incomming: IncomingMessage | undefined;
 
-        // fetching.on("socket", (socket) => {
-        //     this.log("Event emmited:", "socket");
-        // });
+        fetching.on("socket", (socket) => {
+            // this.log("Event emmited:", "socket");
+            requestHTTP.emit("http_init");
+        });
 
         // fetching.on("timeout", () => {
         //     this.log("Event emmited:", "timeout");
@@ -190,42 +332,67 @@ export default class TunnelProxy {
         // });
 
         fetching.on("upgrade", (response, socket, head) => {
-            this.log("Event emmited:", "upgrade");
+            // this.log("Event emmited:", "upgrade");
+            requestHTTP.emit("http_upgrade");
         });
 
         fetching.on("close", () => {
-            this.log("Event emmited:", "close");
+            if(!incomming) {
+                // this.log("Event emmited:", "close");
+                requestHTTP.emit("http_close");
+            }
         });
 
         fetching.on("error", (err) => {
-            this.log("Event emmited:", "error");
+            // this.log("Event emmited:", "error");
+            requestHTTP.emit("http_error", err);
         });
 
         fetching.on("finish", () => {
-            this.log("Event emmited:", "finish");
+            // this.log("Event emmited:", "finish");
+            requestHTTP.emit("http_finish");
         });
 
         fetching.on("response", (response) => {
-            this.log("Event emmited:", "response");
+            const headers = new Headers(response.headers as {[key: string]: string});
+            incomming = response;
+
+            requestHTTP.emit("http_response", headers, response.statusCode!);
+            // this.log("Event emmited:", "response");
 
             response.on("error", (err) => {
-                this.log("response event: error")
+                // this.log("response event: error")
+                requestHTTP.emit("http_error", err);
             });
 
             response.on("end", () => {
-                    this.log("response event: end")
+                // this.log("response event: end");
+                requestHTTP.emit("http_end");
             });
 
             response.on("data", (chunk) => {
-                this.log("response event: data")
+                // this.log("response event: data")
+                requestHTTP.emit("http_data", chunk);
             });
 
             response.on("close", () => {
-                this.log("response event: close")
+                // this.log("response event: close")
+                requestHTTP.emit("http_close");
             });
         });
 
         return requestHTTP;
+    }
+
+    /**
+     * Emit event socket to server
+     * @param eventType Type event
+     * @param args Arguments
+     */
+    private emitEvent(eventType: string, ...args: any[]) {
+        if(this.socket) {
+            this.socket.emit(eventType, ...args);
+        }
     }
 
     /**

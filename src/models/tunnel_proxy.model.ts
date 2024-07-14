@@ -7,7 +7,12 @@ export interface IConfigTunnelProxy {
     /**
      * Url base similar of "http://localhost:9000" or "https://www.google.com"
      */
-    hostproxy_url: string
+    hostproxy_url: string,
+
+    /**
+     * NameProxy to server
+     */
+    proxy_name: string,
 
     /**
      * Flag to show console logs
@@ -23,33 +28,117 @@ export interface IRequestHTTP {
     readonly id_request: number;
 
     /**
-     * Listen the response of request HTTP
-     * @param eventType Event Type of **'request'**
-     * @param callback Callback of listen
+     * Emitted event of http init, is issued when it is ready to send data to the server
+     * @param eventType Http Init Event
+     * @param callback callback
      */
-    on(eventType: "request", callback: (headers: Headers, statusCode: number) => void): void;
+    on(eventType: "http_init", callback: () => void): void;
 
     /**
-     * Listen the body chunk by response of request HTTP  
-     * @param eventType Event Type of **'chunk'**
-     * @param callback Callback of listen
+     * Emitted after you call the end method and it has been determined 
+     * that the server has received all the chunks
+     * @param eventType Http finish event
+     * @param callback callback
      */
-    on(eventType: "chunk", callback: (chunk: Uint32Array) => void): void;
+    on(eventType: "http_finish", callback: () => void): void;
 
     /**
-     * Listen the error of request HTTP
-     * @param eventType Event type of **'error'**
-     * @param callback Callback of listen
-     */
-    on(eventType: "error", callback: (error: Error) => void): void;
+     * Emitted when the server sends the response header, along with the HTTP status code
+     * @param eventType Http response event
+     * @param callback Callback
+     */    
+    on(eventType: "http_response", callback: (headers: Headers, statusCode: number) => void): void;
 
     /**
-     * Listen the end of request HTTP
-     * @param eventType Event type of **'end'**
-     * @param callback Callback of listen
+     * Emitted after receiving the response headers from the server. Emit the data 
+     * chunks of the request body
+     * @param eventType Http data event
+     * @param callback Callback
      */
-    on(eventType: "end", callback: () => void): void;
+    on(eventType: "http_data", callback: (chunk: Uint8Array) => void): void;
 
+    /**
+     * Emitted when the transmission of chunks of the HTTP request body ends
+     * @param eventType Http end event
+     * @param callback Callback
+     */
+    on(eventType: "http_end", callback: () => void): void;
+
+    /**
+     * Emitted when the TCP connection is closed
+     * @param eventType HTTP close event
+     * @param callback Callback
+     */
+    on(eventType: "http_close", callback: () => void): void;
+
+    /**
+     * Emitted when some Error occurs
+     * @param eventType Http error event
+     * @param callback Callback
+     */
+    on(eventType: "http_error", callback: (err: Error) => void): void;
+    
+    /**
+     * Emitted when the upgrade is found in the headers response HTTP
+     * @param eventType Http upgrade event
+     * @param callback Callback
+     */
+    on(eventType: "http_upgrade", callback: () => void): void;
+
+    /**
+     * Emitted event of http init, is issued when it is ready to send data to the server
+     * @param eventType Http Init Event
+     */
+    emit(eventType: "http_init"): void;
+
+    /**
+     * Emitted after you call the end method and it has been determined 
+     * that the server has received all the chunks
+     * @param eventType Http finish event
+     */
+    emit(eventType: "http_finish"): void;
+
+    /**
+     * Emitted when the server sends the response header, along with the HTTP status code
+     * @param eventType Http response event
+     * @param headers headers
+     * @param statusCode code of response HTTP
+     */    
+    emit(eventType: "http_response", headers: Headers, statusCode: number): void;
+
+    /**
+     * Emitted after receiving the response headers from the server. Emit the data 
+     * chunks of the request body
+     * @param eventType Http data event
+     * @param callback Callback
+     */
+    emit(eventType: "http_data", chunk: Uint8Array): void;
+
+    /**
+     * Emitted when the transmission of chunks of the HTTP request body ends
+     * @param eventType Http end event
+     */
+    emit(eventType: "http_end"): void;
+
+    /**
+     * Emitted when the TCP connection is closed
+     * @param eventType HTTP close event
+     */
+    emit(eventType: "http_close"): void;
+
+    /**
+     * Emitted when some Error occurs
+     * @param eventType Http error event
+     * @param err Error
+     */
+    emit(eventType: "http_error", err: Error): void;
+    
+    /**
+     * Emitted when the upgrade is found in the headers response HTTP
+     * @param eventType Http upgrade event
+     */
+    emit(eventType: "http_upgrade"): void;
+    
     /**
      * Abort the request HTTP
      * @param err Associated error 
@@ -60,7 +149,7 @@ export interface IRequestHTTP {
      * Write a chunk to send to request HTTP
      * @param chunk Chunk to send
      */
-    write(chunk: Uint32Array): void;
+    write(chunk: Uint8Array): void;
 
     /**
      * End to write chunks and emit request to get response

@@ -23,12 +23,13 @@ if(!process.env.BACKEND_URL) {
 const [
     _executableArg,
     _fileEntryArg,
-    portOrHostName,
-    nameProxyArg
+    portOrHostNameArg,
+    proxyNameArg
 ] = process.argv;
 
-// default value of nameProxy
-let nameProxy = nameProxyArg;
+// default value of proxyName and hostname
+let proxyName = proxyNameArg;
+let portOrHostName = portOrHostNameArg;
 
 // check if the hostname or port is provided
 if(!portOrHostName) {
@@ -40,7 +41,7 @@ if(!portOrHostName) {
 }
 
 // check if the proxyname is provided
-if(!nameProxy) {
+if(!proxyName) {
     console.log("");
     console.log("The arguments", "<ProxyName>".cyan, "are required");
     console.log("Example:\n");
@@ -57,12 +58,15 @@ if(!regexpPORT.test(portOrHostName)) {
         const url = new URL(portOrHostName);
 
         // Get only origin fragment of URL
-        nameProxy = url.origin;
+        portOrHostName = url.origin;
     }
     catch(err) {
         console.log("The Port or hostname".red, portOrHostName.yellow, "is'nt valid".red);
         process.exit(-1);
     }
+}
+else {
+    portOrHostName = "http://localhost:" + portOrHostName;
 }
 
 
@@ -73,13 +77,27 @@ if(!regexpPORT.test(portOrHostName)) {
 // create a instance of aplication
 const tunnel = new TunnelProxy({
     backend_url: process.env.BACKEND_URL,
-    hostproxy_url: "http://localhost:7000"
+    hostproxy_url: "http://localhost:7000",
+    proxy_name: proxyName
 });
 
 // Start application
 tunnel.inicialize()
-    .then(() => {
-        console.log("Application inicialized");
+    .then(({ origin, destination }) => {
+        console.log("=======================================================");
+        console.log("               Application inicialized");
+        console.log("=======================================================");
+        console.log("");
+        console.log(" origin url:".green);
+        console.log("");
+        console.log("  ", origin.cyan);
+        console.log("");
+        console.log(" proxyed public url:".green);
+        console.log("");
+        console.log("  ", destination.cyan);
+        console.log("");
+        console.log("=======================================================");
+        console.log("");
     })
     .catch((err) => {
         console.error(err instanceof Error ? err.message : "Unknow Error");

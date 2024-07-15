@@ -82,7 +82,7 @@ export default class TunnelProxy {
                 // Disconnect connection Event 
                 this.socket.on("disconnect", (reason) => {
                     if(this.socket) {
-                        this.log("Disconnect".red, reason);
+                        this.log("Lost connection, trying to restore it".red);
 
                         const request = [...this.requests];
 
@@ -112,13 +112,14 @@ export default class TunnelProxy {
 
                             default:
                                 // none actions
+                                err = new Error("The server refused the connection".red);
                         } 
 
                         // reject promise and exit
                         return reject(err);
                     }
 
-                    this.log("Connect Error... retrying...");
+                    this.log("Connect Error... retrying...".yellow);
                 });
 
                 // Connect Event
@@ -138,7 +139,7 @@ export default class TunnelProxy {
                         });
                     }
 
-                    this.log("Connect");
+                    this.log("The connection to the server has been recovered".green);
                 });
 
                 const abortRequest = (id_request: number) => {

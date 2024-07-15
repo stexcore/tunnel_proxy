@@ -14,9 +14,11 @@ if(!process.env.BACKEND_URL) {
     if(configOutput.error) {
         throw configOutput.error;
     }
-    
-    console.log("'BACKEND_URL' environment is'nt defined".red);
-    process.exit(-1);
+
+    if(!process.env.BACKEND_URL) {
+        console.log("'BACKEND_URL' environment is'nt defined".red);
+        process.exit(-1);
+    }
 }
 
 // Extract args
@@ -77,7 +79,7 @@ else {
 // create a instance of aplication
 const tunnel = new TunnelProxy({
     backend_url: process.env.BACKEND_URL,
-    hostproxy_url: "http://localhost:7000",
+    hostproxy_url: portOrHostName,
     proxy_name: proxyName
 });
 
@@ -100,5 +102,5 @@ tunnel.inicialize()
         console.log("");
     })
     .catch((err) => {
-        console.error(err instanceof Error ? err.message : "Unknow Error");
+        console.error((err instanceof Error ? err.message : "Unknow Error")?.red);
     });

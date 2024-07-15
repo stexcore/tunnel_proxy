@@ -112,4 +112,26 @@ However, to solve these inconveniences, it has been decided to redo the project,
 **TCP Client**
 [https://github.com/stexcore/tcp_client](https://github.com/stexcore/tcp_client)
 
+## Explanation of Operation
+
+Once you have the **proxyed public url**, it should look similar to:
+
+```
+http://domain/proxy/proxyName
+```
+
+All incoming requests from that route will be redirected to the proxyed destination root, for example if you run the application as follows:
+
+>     tunnel_proxy_http http://example.com exampleProxy
+
+A proxyed url similar to:
+
+```
+http://domain/proxy/exampleProxy
+```
+
+If you make a request to http://domain/proxy/example/api-status the application will redirect the request to http://example.com/api-status, as a result responding to the request.
+
+We invite you to try the functionality, which as I mentioned has its limitations, but on occasions it can be a quick solutions to use.
+
 ⚙️ Made with effort and dedication, **team stexcore** ❤️

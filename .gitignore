@@ -130,3 +130,5 @@ dist
 .pnp.*
 
 exec
+*.rar
+*.zip

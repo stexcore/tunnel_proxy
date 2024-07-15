@@ -1,6 +1,6 @@
 {
   "name": "tunnel_proxy_http",
-  "version": "1.0.0",
+  "version": "1.0.0-beta",
   "description": "Proxy service that allows establishing a connection to a server, to create a reverse proxy that allows creating a solution to establish hidden or private http connections on the public network.",
   "bin": "./dist/entry.js",
   "main": "./dist/index.js",

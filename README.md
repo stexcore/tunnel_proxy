@@ -4,7 +4,7 @@ Proxy service that allows establishing a connection to a server, to create a rev
 ## Install dependencies
 Before running the project itself, first of all it is necessary to install the dependencies for its correct functioning.
 
->    npm install
+>     npm install
 
 ## Configuring environments
 Before executing, a crucial step is also necessary which is to configure the environments.
@@ -28,20 +28,20 @@ After you have hosted your project on a domain (you can also run it on a local m
 ## Run project
 To run the application in development mode, it is as simple as running a command line.
 
->    npm run dev
+>     npm run dev
 
 Additionally, it is necessary to specify two arguments that allow you to specify the local port or the hostname of a site that should relay the HTTP request. Examples:
 
->    npm run dev 8082 page
+>     npm run dev 8082 page
 
->    npm run dev https://www.google.com google
+>     npm run dev https://www.google.com google
 
->    npm run dev http://localhost:2000 api-server
+>     npm run dev http://localhost:2000 api-server
 
 ## Build Project and Compile
 To generate the minified project assets, run the command:
 
->    npm run build
+>     npm run build
 
 After that, two interesting things happen that I would like to mention. After generating the javascript in the file **/dist** folder, some practical and protables executables are generated in the **/exec** folder, which you can use depending on the operating system of your preference. Since generate executables for Windows, Linux and Macos.
 
@@ -49,32 +49,32 @@ To run the generated executables files, you will need to open your preferred com
 
 The common steps to follow would be to execute the following commands:
 
->    npm run build
->    cd exec
+>     npm run build
+>     cd exec
 
 **Examples For windows:**
 
->    ./tunnel_proxy_http-win.exe 8082 page
+>     ./tunnel_proxy_http-win.exe 8082 page
 
->    ./tunnel_proxy_http-win.exe https://www.google.com google
+>     ./tunnel_proxy_http-win.exe https://www.google.com google
 
->    ./tunnel_proxy_http-win.exe http://localhost:2000 api-server
+>     ./tunnel_proxy_http-win.exe http://localhost:2000 api-server
 
 **Examples For linux:**
 
->    ./tunnel_proxy_http-linux.exe 8082 page
+>     ./tunnel_proxy_http-linux.exe 8082 page
 
->    ./tunnel_proxy_http-linux.exe https://www.google.com google
+>     ./tunnel_proxy_http-linux.exe https://www.google.com google
 
->    ./tunnel_proxy_http-linux.exe http://localhost:2000 api-server
+>     ./tunnel_proxy_http-linux.exe http://localhost:2000 api-server
 
 **Examples For MacOS:**
 
->    ./tunnel_proxy_http-macos.exe 8082 page
+>     ./tunnel_proxy_http-macos.exe 8082 page
 
->    ./tunnel_proxy_http-macos.exe https://www.google.com google
+>     ./tunnel_proxy_http-macos.exe https://www.google.com google
 
->    ./tunnel_proxy_http-macos.exe http://localhost:2000 api-server
+>     ./tunnel_proxy_http-macos.exe http://localhost:2000 api-server
 
 ## Behavior during execution:
 Well once it starts, and there are no problems connections to the server should display a message similar to this:

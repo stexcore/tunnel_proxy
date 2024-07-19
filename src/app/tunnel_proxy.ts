@@ -13,9 +13,20 @@ import "colors";
 export default class TunnelProxy {
 
     /**
-     * Url ApiServer **api_reverse_proxy**
+     * Hostname url of ApiServer **api_reverse_proxy**
      */
-    private readonly backend_url: string;
+    private readonly backend_hostname: string;
+
+    /**
+     * Port hostname of Apiserver **api_reverse_proxy**
+     */
+    private readonly backend_port: number;
+
+    /**
+     * Secure protocol of apiserver **api_serverse_proxy**
+     * example: https, wss, etc... (secure), http, ws, etc... (insecure)
+     */
+    private readonly backend_secure_protocol: boolean;
 
     /**
      * Url host proxy
@@ -46,7 +57,9 @@ export default class TunnelProxy {
      * Builder tunnel proxy
      */
     constructor(config: IConfigTunnelProxy) {
-        this.backend_url = config.backend_url;
+        this.backend_hostname = config.backend_hostname;
+        this.backend_port = config.backend_port;
+        this.backend_secure_protocol = config.backend_secure_protocol;
         this.hostproxy_url = config.hostproxy_url;
         this.proxy_name = config.proxy_name;
         this.show_logs = config.show_logs ?? true;
@@ -70,13 +83,21 @@ export default class TunnelProxy {
                 }
 
                 let connectedSomeTime = false;
+
+                const urlBackend = (
+                    // protocol
+                    (this.backend_secure_protocol ? "https" : "http") + "://" +
+                    // subdomain
+                    encodeURIComponent(this.proxy_name) + "-proxy." +
+                    // hostname
+                    this.backend_hostname + 
+                    // port
+                    (this.backend_port == 8082 ? "" : (":" + this.backend_port))
+                );
                 
                 // create socket connection
-                this.socket = io(this.backend_url, {
-                    reconnection: true,
-                    query: {
-                        proxyName: this.proxy_name
-                    }
+                this.socket = io(urlBackend, {
+                    reconnection: true
                 });
 
                 // Disconnect connection Event 
@@ -126,10 +147,7 @@ export default class TunnelProxy {
                 this.socket.on("connect", () => {
                     if(!connectedSomeTime) {
                         const origin = new URL(this.hostproxy_url);
-                        const destination = new URL(
-                            "/proxy/" + encodeURIComponent(this.proxy_name),
-                            this.backend_url
-                        );
+                        const destination = new URL(urlBackend);
 
                         connectedSomeTime = true;
 
@@ -151,6 +169,19 @@ export default class TunnelProxy {
                 // request HTTP
                 this.socket.on("http_request", (id_request: number, request: IRequest) => {
 
+                    request.headers = new Headers(request.headers);
+
+                    request.headers.delete('purpose');
+                    request.headers.delete('sec-ch-ua');
+                    request.headers.delete('sec-ch-ua-mobile');
+                    request.headers.delete('sec-ch-ua-platform');
+                    request.headers.delete('sec-fetch-dest');
+                    request.headers.delete('sec-fetch-mode');
+                    request.headers.delete('sec-fetch-site');
+                    request.headers.delete('sec-fetch-user');
+                    request.headers.delete('sec-purpose');
+                    request.headers.delete('upgrade-insecure-requests');
+
                     let statusCodeRequest: number | undefined;
 
                     // check if error of server
@@ -162,10 +193,7 @@ export default class TunnelProxy {
                     }
 
                     // create request HTTP
-                    const requestHTTP = this.CreateRequestHTTP(id_request, {
-                        ...request,
-                        headers: new Headers(request.headers)
-                    });
+                    const requestHTTP = this.CreateRequestHTTP(id_request, request);
 
                     requestHTTP.on("http_init", () => {
                         this.emitEvent("http_init", id_request);
@@ -180,6 +208,40 @@ export default class TunnelProxy {
                     });
 
                     requestHTTP.on("http_response", (headers: Headers, statusCode: number) => {
+
+                        console.log("statusCode:", typeof statusCode, statusCode);
+                        
+                        if(statusCode >= 300 && statusCode < 400) {
+                            const urlRedirect = headers.get("Location");
+                            
+                            if(urlRedirect) {
+                                try {
+                                    const url = new URL(urlRedirect);
+                                    const urlRequested = new URL(this.hostproxy_url);
+
+                                    if(url.origin === urlRequested.origin) {
+                                        console.log("NEW URL:",
+                                            new URL(
+                                                url.pathname + url.search,
+                                                urlBackend
+                                            ).href
+                                        );
+
+                                        headers.set(
+                                            "Location",
+                                            new URL(
+                                                url.pathname + url.search,
+                                                urlBackend
+                                            ).href
+                                        );
+                                    }
+                                }
+                                catch(err) {
+                                    console.log(err);
+                                }
+                            }
+                        }
+
                         const headersData: {[key: string]: string} = {};
 
                         headers.forEach((value, keyname) => {

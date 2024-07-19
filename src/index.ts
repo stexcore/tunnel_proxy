@@ -6,7 +6,7 @@ import dotenv from "dotenv";
  ***************************************/
 
 // check environment
-if(!process.env.BACKEND_URL) {
+if(!process.env.BACKEND_HOSTNAME || !process.env.BACKEND_PORT || !process.env.BACKEND_SECURE_PROTOCOL) {
     // config environments
     const configOutput = dotenv.config();
 
@@ -15,8 +15,18 @@ if(!process.env.BACKEND_URL) {
         throw configOutput.error;
     }
 
-    if(!process.env.BACKEND_URL) {
-        console.log("'BACKEND_URL' environment is'nt defined".red);
+    if(!process.env.BACKEND_HOSTNAME) {
+        console.log("'BACKEND_HOSTNAME' environment is'nt defined".red);
+        process.exit(-1);
+    }
+
+    if(!process.env.BACKEND_PORT) {
+        console.log("'BACKEND_PORT' environment is'nt defined".red);
+        process.exit(-1);
+    }
+
+    if(!process.env.BACKEND_SECURE_PROTOCOL) {
+        console.log("'BACKEND_SECURE_PROTOCOL' environment is'nt defined".red);
         process.exit(-1);
     }
 }
@@ -78,7 +88,9 @@ else {
 
 // create a instance of aplication
 const tunnel = new TunnelProxy({
-    backend_url: process.env.BACKEND_URL,
+    backend_hostname: process.env.BACKEND_HOSTNAME,
+    backend_port: Number(process.env.BACKEND_PORT),
+    backend_secure_protocol: process.env.BACKEND_SECURE_PROTOCOL == "true",
     hostproxy_url: portOrHostName,
     proxy_name: proxyName
 });

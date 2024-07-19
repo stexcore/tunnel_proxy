@@ -1,8 +1,18 @@
 export interface IConfigTunnelProxy {
     /**
-     * Backend **api_reverse_proxy**
+     * Backend hostname **api_reverse_proxy**
      */
-    backend_url: string,
+    backend_hostname: string,
+
+    /**
+     * Backend port **api_reverse_proxy**
+     */
+    backend_port: number,
+
+    /**
+     * backend secure protocol **api_reverse_proxy**
+     */
+    backend_secure_protocol: boolean,
 
     /**
      * Url base similar of "http://localhost:9000" or "https://www.google.com"

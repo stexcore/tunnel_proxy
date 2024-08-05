@@ -2,7 +2,9 @@ import TunnelProxy from "../app/tunnel_proxy";
 
 // create a instance of aplication
 const tunnel = new TunnelProxy({
-    backend_url: "http://localhost:7000",
+    backend_hostname: "localhost",
+    backend_port: 7000,
+    backend_secure_protocol: false,
     hostproxy_url: "http://localhost:7000",
     proxy_name: "example/pause"
 });

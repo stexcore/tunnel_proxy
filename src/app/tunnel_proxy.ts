@@ -1,10 +1,12 @@
 import { ErrorNotAvariableProxyName, ErrorUnknow } from "../classes/errors.class";
-import { IConfigTunnelProxy, IRequestHTTP } from "../models/tunnel_proxy.model";
+import { IConfigTunnelProxy, IConnectionWebsocket, IRequestHTTP } from "../models/tunnel_proxy.model";
 import { io, Socket } from "socket.io-client";
 import { IRequest } from "../models/requests.model";
 import errorsContants from "../constants/errors.contants";
 import http, { IncomingMessage } from "http";
 import https from "https";
+import { IHandshakeWebsocket } from "../models/websocket.model";
+import { WebSocket } from "ws";
 import "colors";
 
 /**
@@ -49,6 +51,11 @@ export default class TunnelProxy {
     private requests: IRequestHTTP[] = [];
 
     /**
+     * Array of connections websockets
+     */
+    private websocketConnections: IConnectionWebsocket[] = [];
+
+    /**
      * Connection to server
      */
     private socket: Socket | null;
@@ -64,6 +71,18 @@ export default class TunnelProxy {
         this.proxy_name = config.proxy_name;
         this.show_logs = config.show_logs ?? true;
         this.socket = null;
+    }
+
+    private AbortRequestHTTP(id_request: number) {
+        if(this.socket) {
+            this.socket.emit("http_abort", id_request, "Does not exist the request '" + id_request + "'");
+        }
+    }
+
+    private AbortConnectionWebsocket(id_connection: number) {
+        if(this.socket) {
+            this.socket.emit("websocket_abort", id_connection, "Does not exist the request '" + id_connection + "'");
+        }
     }
 
     /**
@@ -97,7 +116,8 @@ export default class TunnelProxy {
                 
                 // create socket connection
                 this.socket = io(urlBackend, {
-                    reconnection: true
+                    reconnection: true,
+                    path: "/connection-io"
                 });
 
                 // Disconnect connection Event 
@@ -159,28 +179,12 @@ export default class TunnelProxy {
 
                     this.log("The connection to the server has been recovered".green);
                 });
-
-                const abortRequest = (id_request: number) => {
-                    if(this.socket) {
-                        this.socket.emit("http_abort", id_request, "Does not exist the request '" + id_request + "'");
-                    }
-                }
+                
 
                 // request HTTP
                 this.socket.on("http_request", (id_request: number, request: IRequest) => {
 
                     request.headers = new Headers(request.headers);
-
-                    request.headers.delete('purpose');
-                    request.headers.delete('sec-ch-ua');
-                    request.headers.delete('sec-ch-ua-mobile');
-                    request.headers.delete('sec-ch-ua-platform');
-                    request.headers.delete('sec-fetch-dest');
-                    request.headers.delete('sec-fetch-mode');
-                    request.headers.delete('sec-fetch-site');
-                    request.headers.delete('sec-fetch-user');
-                    request.headers.delete('sec-purpose');
-                    request.headers.delete('upgrade-insecure-requests');
 
                     let statusCodeRequest: number | undefined;
 
@@ -208,8 +212,6 @@ export default class TunnelProxy {
                     });
 
                     requestHTTP.on("http_response", (headers: Headers, statusCode: number) => {
-
-                        console.log("statusCode:", typeof statusCode, statusCode);
                         
                         if(statusCode >= 300 && statusCode < 400) {
                             const urlRedirect = headers.get("Location");
@@ -220,13 +222,6 @@ export default class TunnelProxy {
                                     const urlRequested = new URL(this.hostproxy_url);
 
                                     if(url.origin === urlRequested.origin) {
-                                        console.log("NEW URL:",
-                                            new URL(
-                                                url.pathname + url.search,
-                                                urlBackend
-                                            ).href
-                                        );
-
                                         headers.set(
                                             "Location",
                                             new URL(
@@ -318,6 +313,78 @@ export default class TunnelProxy {
                     });
                 });
 
+                // request Websocket
+                this.socket.on("websocket_request", (id_connection: number, request: IHandshakeWebsocket) => {
+                    request.headers = new Headers(request.headers);
+
+                    console.log("WEBSOCKET REQUEST");
+
+                    
+                    // check if error of server
+                    if(this.websocketConnections.some(requestHTTPItem => requestHTTPItem.id_connection === id_connection)) {
+                        return console.warn(
+                            "WARNING: The server issued an Websocket request with an identifier similar".yellow,
+                            "to another HTTP request in progress".yellow
+                        );
+                    }
+
+                    this.log(
+                        "[OPEN WEBSOCKET]".green
+                    )
+
+                    // create instance of connection websocket
+                    const connection = this.CreateWebsocketConnection(id_connection, request);
+
+                    // listen event open connection
+                    connection.on("websocket_open", () => {
+                        this.emitEvent("websocket_open", id_connection);
+                    });
+
+                    // listen event close connection
+                    connection.on("websocket_close", () => {
+                        this.emitEvent("websocket_close", id_connection);
+                    });
+
+                    // listen event message received
+                    connection.on("websocket_message", (message, isBinary) => {
+                        this.emitEvent("websocket_message", id_connection, message, isBinary);
+                    });
+
+                    // listen event error
+                    connection.on("websocket_error", (err) => {
+                        this.emitEvent("websocket_error", id_connection, err instanceof Error ? err.message : "Unknow Error");
+                    });
+                });
+
+                this.socket.on("websocket_close", (id_connection: number) => {
+                    const connection = this.GetConnectionWebsocket(id_connection);
+
+                    if(connection) {
+                        connection.close();
+                    }
+                    else this.AbortConnectionWebsocket(id_connection);
+                });
+
+                this.socket.on("websocket_error", (id_connection: number, err: string) => {
+                    const connection = this.GetConnectionWebsocket(id_connection);
+
+                    if(connection) {
+                        connection.close(new Error(err));
+                    }
+                    else this.AbortConnectionWebsocket(id_connection);
+                });
+
+                this.socket.on("websocket_message", (id_connection: number, message: Buffer, isBinary: boolean) => {
+                    const connection = this.GetConnectionWebsocket(id_connection);
+
+                    console.log("WS:", message, isBinary);
+
+                    if(connection) {
+                        connection.send(isBinary ? message : message.toString());
+                    }
+                    else this.AbortConnectionWebsocket(id_connection);
+                });
+
                 // data of request HTTP
                 this.socket.on("http_data", (id_request: number, chunk: Uint8Array) => {
                     const request = this.GetRequestHTTP(id_request);
@@ -325,7 +392,7 @@ export default class TunnelProxy {
                     if(request) {
                         request.write(chunk);
                     }
-                    else abortRequest(id_request);
+                    else this.AbortRequestHTTP(id_request);
                 });
 
                 // end write data of request HTTP
@@ -335,7 +402,7 @@ export default class TunnelProxy {
                     if(request) {
                         request.end();
                     }
-                    else abortRequest(id_request);
+                    else this.AbortRequestHTTP(id_request);
                 });
 
                 // abort request HTTP
@@ -345,7 +412,7 @@ export default class TunnelProxy {
                     if(request) {
                         request.abort(new Error(errorMsg));
                     }
-                    else abortRequest(id_request);
+                    else this.AbortRequestHTTP(id_request);
                 });
             }
             catch(err) {
@@ -456,26 +523,6 @@ export default class TunnelProxy {
             requestHTTP.emit("http_init");
         });
 
-        // fetching.on("timeout", () => {
-        //     this.log("Event emmited:", "timeout");
-        // });
-        
-        // fetching.on("drain", () => {
-        //     this.log("Event emmited:", "drain");
-        // });
-
-        // fetching.on("connect", (incomming, socket, head) => {
-        //     this.log("Event emmited:", "connect");
-        // });
-
-        // fetching.on("continue", () => {
-        //     this.log("Event emmited:", "continue");
-        // });
-
-        // fetching.on("information", (info) => {
-        //     this.log("Event emmited:", "information");
-        // });
-
         fetching.on("upgrade", (response, socket, head) => {
             // this.log("Event emmited:", "upgrade");
             requestHTTP.emit("http_upgrade");
@@ -529,9 +576,121 @@ export default class TunnelProxy {
         return requestHTTP;
     }
 
+    public GetConnectionWebsocket(id_connection: number): IConnectionWebsocket | null {
+        const connection = this.websocketConnections.find(connection => connection.id_connection === id_connection);
+        return connection ?? null;
+    }
+
     public GetRequestHTTP(id_request: number): IRequestHTTP | null {
         const request = this.requests.find(requestItem => requestItem.id_request === id_request);
         return request ?? null;
+    }
+
+    public CreateWebsocketConnection(id_connection: number, handshake: IHandshakeWebsocket): IConnectionWebsocket {
+        // request url
+        const url = new URL(handshake.path, this.hostproxy_url);
+        url.protocol = url.protocol == "https" ? "wss" : "ws";
+
+        const listenner: {
+            eventType: string,
+            callback: (...args: any[]) => void
+        }[] = [];
+
+        const connectionWebsocket: IConnectionWebsocket = {
+
+            // ID request
+            id_connection: id_connection,
+
+            // Add listen
+            on(eventType: string, callback: (...args: any[]) => void): void {
+                // add listenner
+                listenner.push({ eventType, callback })
+            },
+
+            // write body
+            send(chunk): void {
+                socket.send(chunk);
+            },
+
+            emit(eventType: string, ...args: any[]): void {
+                listenner.forEach(listennerItem => {
+                    try {
+                        if(listennerItem.eventType === eventType) {
+                            listennerItem.callback(...args);
+                        }
+                    }
+                    catch(err) {
+                        console.error(err);
+                    }
+                });
+            },
+
+            // close the connection
+            close(err?: Error): void {
+                controller.abort(err);
+            }
+        };
+
+        // Append listen to close socket tcp
+        // requestHTTP.on("http_close", () => {
+        //     // remove of memory
+        //     this.requests = this.requests.filter(requestItem => requestItem.id_request !== id_request);
+        // });
+
+        // Add request of array
+        this.websocketConnections.push(connectionWebsocket);
+
+        // Init headers
+        const headers = new Headers(handshake.headers);
+        const headersRequest: {[key: string]: string} = { }
+        
+        // headers.set("host", url.host || handshake.headers.get("host") || "");
+        headers.forEach((value, keyname) => {
+            headersRequest[keyname] = value;
+        });
+
+        const controller = new AbortController();
+        const socket = new WebSocket(url.href, {
+            // headers: headersRequest
+        });
+
+        console.log("CREATING CONNECTION TO:", url.href);
+
+        socket.on("open", () => {
+            connectionWebsocket.emit("websocket_open");
+            console.log("ev:", "websocket_open")
+        });
+
+        socket.on("close", (code, reason) => {
+            connectionWebsocket.emit("websocket_close");
+            console.log("ev:", "websocket_close")
+        });
+
+        socket.on("error", (err) => {
+            connectionWebsocket.emit("websocket_error", err);
+            console.log("ev:", "websocket_error")
+        });
+
+        socket.on("message", (data, isBinary) => {
+            if(data instanceof Array) {
+                connectionWebsocket.emit("websocket_message", Buffer.concat(data), isBinary);
+                console.log("ev:", "websocket_message")
+            }
+            else {
+                connectionWebsocket.emit("websocket_message", Buffer.from(data), isBinary);
+                console.log("ev:", "websocket_message")
+            }
+        });
+
+        socket.on("unexpected-response", (request, response) => {
+            console.log("EVENT:", "unexpected-response")
+        });
+
+        socket.on("upgrade", (incoming) => {
+            console.log("EVENT:", "upgrade")
+        });
+
+        return connectionWebsocket;
     }
 
     /**
